@@ -1,0 +1,61 @@
+name: Nebula Engine Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-macos:
+    name: Build macOS (Intel + Apple Silicon)
+    runs-on: macos-latest
+
+    strategy:
+      matrix:
+        arch: [x86_64, arm64]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set architecture
+        run: |
+          echo "ARCH=${{ matrix.arch }}" >> $GITHUB_ENV
+
+      - name: Build Nebula
+        run: |
+          make clean || true
+          make ARCH=${{ matrix.arch }}
+
+      - name: Create DMG
+        run: |
+          mkdir -p dist/${{ matrix.arch }}
+
+          hdiutil create -volname "Nebula-${{ matrix.arch }}" \
+            -srcfolder Nebula.app \
+            -ov -format UDZO \
+            dist/${{ matrix.arch }}/Nebula-${{ matrix.arch }}.dmg
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nebula-${{ matrix.arch }}
+          path: dist/${{ matrix.arch }}/*.dmg
+
+  release:
+    name: Create GitHub Release
+    needs: build-macos
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**/**/*.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
